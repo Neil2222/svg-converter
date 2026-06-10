@@ -78,7 +78,32 @@
     font-size: 0.95rem;
     width: 6rem;
   }
-  .controls .hint { color: var(--muted); font-size: 0.85rem; }
+  label.tooltip {
+    display: inline-block;
+    position: relative;
+    cursor: help;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+  }
+  label.tooltip::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    width: 290px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.85rem;
+    color: var(--text);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.1s;
+    pointer-events: none;
+    z-index: 10;
+  }
+  label.tooltip:hover::after { opacity: 1; visibility: visible; }
 
   #status { color: var(--muted); min-height: 1.4em; margin: 0.5rem 0; }
   #status.error { color: #f87171; }
@@ -131,12 +156,11 @@
   </div>
 
   <div class="controls">
-    <label for="exportWidth">Exportgrootte:</label>
+    <label for="exportWidth" class="tooltip" data-tip="Bepaalt alleen de standaardweergavegrootte (bijv. in Word of een browser zonder CSS); de SVG zelf blijft oneindig schaalbaar.">Exportgrootte:</label>
     <input type="number" id="exportWidth" min="16" max="20000" step="1" disabled>
     <span>&times; <span id="exportHeight">&ndash;</span> px</span>
     <button id="download" class="primary" disabled>Download SVG</button>
     <button id="copy" disabled>Kopieer SVG</button>
-    <span class="hint">bepaalt alleen de standaardweergave &mdash; de SVG blijft oneindig schaalbaar</span>
   </div>
 
   <p id="status"></p>
