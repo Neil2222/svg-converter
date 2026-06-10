@@ -9,6 +9,20 @@ ICO, TGA, PCX en PPM.
 
 ## Starten
 
+Draait als Windows-service **SvgConverter** (via NSSM, `C:\tools\nssm.exe`),
+start automatisch mee met de PC. Beheer (admin-terminal):
+
+```
+nssm restart SvgConverter   # na een code-update
+nssm stop SvgConverter
+nssm status SvgConverter
+```
+
+Logs: `logs\out.log` en `logs\err.log`. Crasht de server, dan start NSSM
+hem automatisch opnieuw.
+
+Handmatig draaien (zonder service) kan ook:
+
 ```
 uv sync
 start.bat
