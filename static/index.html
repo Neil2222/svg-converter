@@ -46,7 +46,7 @@
     margin: 1rem 0;
   }
   label { color: var(--muted); }
-  select, button {
+  button {
     background: var(--panel);
     color: var(--text);
     border: 1px solid var(--border);
@@ -55,9 +55,30 @@
     font-size: 0.95rem;
     cursor: pointer;
   }
-  select:hover, button:hover { border-color: var(--accent); }
+  button:hover { border-color: var(--accent); }
   button.primary { background: var(--accent); color: #0f172a; font-weight: 600; border: none; }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .segmented {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .segmented button { border: none; border-radius: 0; }
+  .segmented button + button { border-left: 1px solid var(--border); }
+  .segmented button.active { background: var(--accent); color: #0f172a; font-weight: 600; }
+
+  input[type="number"] {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.6rem;
+    font-size: 0.95rem;
+    width: 6rem;
+  }
+  .controls .hint { color: var(--muted); font-size: 0.85rem; }
 
   #status { color: var(--muted); min-height: 1.4em; margin: 0.5rem 0; }
   #status.error { color: #f87171; }
@@ -100,15 +121,22 @@
   </div>
 
   <div class="controls">
-    <label for="preset">Type afbeelding:</label>
-    <select id="preset">
-      <option value="logo">Logo / icoon</option>
-      <option value="tekening" selected>Tekening / illustratie</option>
-      <option value="foto">Foto (experimenteel)</option>
-      <option value="zwartwit">Zwart-wit / lijntekening</option>
-    </select>
+    <label>Type afbeelding:</label>
+    <div class="segmented" id="preset">
+      <button data-value="logo">Logo / icoon</button>
+      <button data-value="tekening" class="active">Tekening / illustratie</button>
+      <button data-value="foto">Foto (experimenteel)</button>
+      <button data-value="zwartwit">Zwart-wit / lijntekening</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <label for="exportWidth">Exportgrootte:</label>
+    <input type="number" id="exportWidth" min="16" max="20000" step="1" disabled>
+    <span>&times; <span id="exportHeight">&ndash;</span> px</span>
     <button id="download" class="primary" disabled>Download SVG</button>
     <button id="copy" disabled>Kopieer SVG</button>
+    <span class="hint">bepaalt alleen de standaardweergave &mdash; de SVG blijft oneindig schaalbaar</span>
   </div>
 
   <p id="status"></p>
@@ -128,15 +156,20 @@
 <script>
   const dropzone = document.getElementById('dropzone');
   const fileinput = document.getElementById('fileinput');
-  const presetEl = document.getElementById('preset');
+  const presetGroup = document.getElementById('preset');
   const downloadBtn = document.getElementById('download');
   const copyBtn = document.getElementById('copy');
   const statusEl = document.getElementById('status');
   const resultEl = document.getElementById('result');
+  const exportWidthEl = document.getElementById('exportWidth');
+  const exportHeightEl = document.getElementById('exportHeight');
 
   let currentFile = null;
   let currentSvg = null;
+  let currentPreset = 'tekening';
   let svgUrl = null;
+  let natW = null;
+  let natH = null;
 
   function setStatus(msg, isError = false) {
     statusEl.textContent = msg;
@@ -157,7 +190,7 @@
 
     const fd = new FormData();
     fd.append('file', currentFile);
-    fd.append('preset', presetEl.value);
+    fd.append('preset', currentPreset);
 
     let res;
     try {
@@ -174,6 +207,14 @@
     }
 
     currentSvg = await res.text();
+    const dims = currentSvg.match(/<svg[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"/);
+    natW = dims ? parseFloat(dims[1]) : null;
+    natH = dims ? parseFloat(dims[2]) : null;
+    exportWidthEl.disabled = !natW;
+    if (natW) {
+      exportWidthEl.value = Math.round(natW);
+      exportHeightEl.textContent = Math.round(natH);
+    }
     if (svgUrl) URL.revokeObjectURL(svgUrl);
     svgUrl = URL.createObjectURL(new Blob([currentSvg], { type: 'image/svg+xml' }));
     document.getElementById('svgImg').src = svgUrl;
@@ -200,7 +241,31 @@
 
   dropzone.addEventListener('click', () => fileinput.click());
   fileinput.addEventListener('change', () => loadFile(fileinput.files[0]));
-  presetEl.addEventListener('change', convert);
+
+  presetGroup.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-value]');
+    if (!btn) return;
+    presetGroup.querySelectorAll('button').forEach(b =>
+      b.classList.toggle('active', b === btn));
+    currentPreset = btn.dataset.value;
+    convert();
+  });
+
+  exportWidthEl.addEventListener('input', () => {
+    const w = parseInt(exportWidthEl.value, 10);
+    exportHeightEl.textContent = natW && w > 0 ? Math.round(w * natH / natW) : '–';
+  });
+
+  // De gekozen exportbreedte alleen in de width/height-attributen zetten;
+  // de viewBox blijft staan, dus de SVG zelf blijft vrij schaalbaar.
+  function exportSvg() {
+    const w = parseInt(exportWidthEl.value, 10);
+    if (!currentSvg || !natW || !(w > 0)) return currentSvg;
+    const h = Math.round(w * natH / natW);
+    return currentSvg.replace(/<svg([^>]*)>/, (full, attrs) =>
+      '<svg' + attrs.replace(/\s(?:width|height)="[^"]*"/g, '') +
+      ` width="${w}" height="${h}">`);
+  }
 
   dropzone.addEventListener('dragover', e => {
     e.preventDefault();
@@ -214,14 +279,16 @@
   });
 
   downloadBtn.addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([exportSvg()], { type: 'image/svg+xml' }));
     const a = document.createElement('a');
-    a.href = svgUrl;
+    a.href = url;
     a.download = (currentFile.name.replace(/\.[^.]+$/, '') || 'afbeelding') + '.svg';
     a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 
   copyBtn.addEventListener('click', async () => {
-    await navigator.clipboard.writeText(currentSvg);
+    await navigator.clipboard.writeText(exportSvg());
     setStatus('SVG gekopieerd naar klembord.');
   });
 </script>

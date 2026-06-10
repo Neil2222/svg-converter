@@ -1,4 +1,5 @@
 import io
+import re
 
 import vtracer
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -76,6 +77,16 @@ async def convert(file: UploadFile = File(...), preset: str = Form("tekening")):
         )
     except Exception:
         raise HTTPException(status_code=500, detail="Vectoriseren is mislukt.")
+
+    # VTracer zet width/height zonder viewBox; zonder viewBox schaalt de SVG
+    # niet mee wanneer die maten later worden aangepast.
+    if "viewBox" not in svg:
+        svg = re.sub(
+            r'(<svg[^>]*?)\swidth="([\d.]+)"\sheight="([\d.]+)"',
+            r'\1 width="\2" height="\3" viewBox="0 0 \2 \3"',
+            svg,
+            count=1,
+        )
 
     return Response(content=svg, media_type="image/svg+xml")
 
