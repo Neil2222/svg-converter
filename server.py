@@ -1,7 +1,9 @@
 import io
 import re
 
+import numpy as np
 import vtracer
+from scipy import ndimage
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
@@ -46,13 +48,36 @@ PRESETS = {
 app = FastAPI(title="svg-converter")
 
 
+def remove_white_background(img: Image.Image, threshold: int = 240) -> Image.Image:
+    """Maak witte achtergrond transparant via flood fill vanaf de randen.
+
+    Alleen near-white gebieden die de rand raken worden verwijderd; witte
+    details binnenin de afbeelding blijven staan. VTracer slaat transparante
+    pixels vervolgens over bij het traceren.
+    """
+    arr = np.array(img)  # RGBA
+    near_white = (arr[..., :3] >= threshold).all(axis=2) & (arr[..., 3] > 0)
+    labels, _ = ndimage.label(near_white)
+    border_labels = np.unique(
+        np.concatenate([labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1]])
+    )
+    border_labels = border_labels[border_labels != 0]
+    if border_labels.size:
+        arr[np.isin(labels, border_labels), 3] = 0
+    return Image.fromarray(arr)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
 @app.post("/api/convert")
-async def convert(file: UploadFile = File(...), preset: str = Form("tekening")):
+async def convert(
+    file: UploadFile = File(...),
+    preset: str = Form("tekening"),
+    remove_bg: bool = Form(False),
+):
     if preset not in PRESETS:
         raise HTTPException(status_code=400, detail=f"Onbekende preset: {preset}")
 
@@ -73,6 +98,9 @@ async def convert(file: UploadFile = File(...), preset: str = Form("tekening")):
 
     if max(img.size) > MAX_DIMENSION:
         img.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
+
+    if remove_bg:
+        img = remove_white_background(img)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")

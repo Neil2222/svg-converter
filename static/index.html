@@ -85,6 +85,13 @@
     text-decoration: underline dotted;
     text-underline-offset: 3px;
   }
+  label.checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+  }
+  label.checkbox input { accent-color: var(--accent); width: 1rem; height: 1rem; }
   label.tooltip::after {
     content: attr(data-tip);
     position: absolute;
@@ -231,6 +238,9 @@
       <button data-value="foto">Foto (experimenteel)</button>
       <button data-value="zwartwit">Zwart-wit / lijntekening</button>
     </div>
+    <label class="checkbox tooltip" data-tip="Maakt witte achtergrond die de rand raakt transparant; witte details binnenin de afbeelding blijven staan.">
+      <input type="checkbox" id="removeBg"> Witte achtergrond verwijderen
+    </label>
   </div>
 
   <div class="controls">
@@ -322,6 +332,7 @@
     const fd = new FormData();
     fd.append('file', currentFile);
     fd.append('preset', currentPreset);
+    fd.append('remove_bg', document.getElementById('removeBg').checked);
 
     let res;
     try {
@@ -402,6 +413,8 @@
     currentPreset = btn.dataset.value;
     convert();
   });
+
+  document.getElementById('removeBg').addEventListener('change', convert);
 
   exportWidthEl.addEventListener('input', () => {
     const w = parseInt(exportWidthEl.value, 10);

@@ -47,6 +47,9 @@ Open de pagina, sleep een JPG/PNG naar de dropzone en kies het type afbeelding:
 Het resultaat verschijnt naast het origineel en is te downloaden of naar het
 klembord te kopiëren. Wisselen van preset converteert direct opnieuw.
 
+**Witte achtergrond verwijderen** maakt witte vlakken die de beeldrand raken
+transparant (flood fill); witte details binnenin de afbeelding blijven staan.
+
 ## Limieten
 
 - Max 20 MB upload
