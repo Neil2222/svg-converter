@@ -216,7 +216,7 @@
   <p class="sub">Zet vrijwel elke afbeelding om naar een echte vector-SVG.</p>
 
   <div id="dropzone">
-    <p><strong>Sleep een afbeelding hierheen</strong> of klik om te kiezen</p>
+    <p><strong>Sleep een afbeelding hierheen</strong>, klik om te kiezen, of plak met Ctrl+V</p>
     <p class="hint">JPG, PNG, WebP, GIF, HEIC, BMP, TIFF, JPEG&nbsp;2000 en meer, max 20 MB.
       Grote afbeeldingen worden verkleind tot 2000 px.</p>
     <input type="file" id="fileinput"
@@ -384,6 +384,15 @@
 
   dropzone.addEventListener('click', () => fileinput.click());
   fileinput.addEventListener('change', () => loadFile(fileinput.files[0]));
+
+  document.addEventListener('paste', e => {
+    const item = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
+    if (!item) return;
+    e.preventDefault();
+    const blob = item.getAsFile();
+    const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    loadFile(new File([blob], 'klembord.' + ext, { type: blob.type }));
+  });
 
   presetGroup.addEventListener('click', e => {
     const btn = e.target.closest('button[data-value]');
