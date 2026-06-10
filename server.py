@@ -103,6 +103,23 @@ async def convert(
             "(bijv. JPG, PNG, WebP, GIF, HEIC, BMP of TIFF).",
         )
 
+    # VTracer negeert alleen 100% transparante pixels en tracet al het andere
+    # als volledig dekkend; zwakke schaduwen/ruis in het alphakanaal zouden
+    # dus keihard zwart worden. Alles onder 50% dekking wordt daarom volledig
+    # transparant gemaakt. Daarna de kleur van de dichtstbijzijnde dekkende
+    # pixel uitsmeren onder de transparante gebieden ("edge bleeding"), zodat
+    # LANCZOS-interpolatie bij het schalen randpixels niet met de (onzichtbare)
+    # RGB-waarden onder de transparantie mengt.
+    arr = np.array(img)
+    arr[..., 3] = np.where(arr[..., 3] < 128, 0, arr[..., 3])
+    transparent = arr[..., 3] == 0
+    if transparent.any() and not transparent.all():
+        idx_y, idx_x = ndimage.distance_transform_edt(
+            transparent, return_distances=False, return_indices=True
+        )
+        arr[..., :3] = arr[idx_y, idx_x, :3]
+    img = Image.fromarray(arr)
+
     if max(img.size) > MAX_DIMENSION:
         img.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
 
@@ -113,7 +130,14 @@ async def convert(
     if max(img.size) < 1400:
         scale = min(4, MAX_DIMENSION // max(img.size))
         if scale > 1:
-            img = img.resize((img.width * scale, img.height * scale), Image.LANCZOS)
+            # BILINEAR i.p.v. LANCZOS: lanczos-ringing maakt randpixels net
+            # iets feller, wat na clustering tot honderden snippers leidt.
+            img = img.resize((img.width * scale, img.height * scale), Image.BILINEAR)
+
+    # Na het schalen nogmaals: interpolatie maakt randpixels halfdoorzichtig.
+    arr = np.array(img)
+    arr[..., 3] = np.where(arr[..., 3] < 128, 0, arr[..., 3])
+    img = Image.fromarray(arr)
 
     if remove_bg:
         img = remove_background(img)
