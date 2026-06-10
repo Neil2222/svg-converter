@@ -106,6 +106,15 @@ async def convert(
     if max(img.size) > MAX_DIMENSION:
         img.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
 
+    # Kleine afbeeldingen opschalen vóór het traceren: fijne details (zoals
+    # kleine tekst) zijn anders kleiner dan de speckle-filter en verdwijnen.
+    display_size = img.size
+    scale = 1
+    if max(img.size) < 1400:
+        scale = min(4, MAX_DIMENSION // max(img.size))
+        if scale > 1:
+            img = img.resize((img.width * scale, img.height * scale), Image.LANCZOS)
+
     if remove_bg:
         img = remove_background(img)
 
@@ -125,6 +134,16 @@ async def convert(
         svg = re.sub(
             r'(<svg[^>]*?)\swidth="([\d.]+)"\sheight="([\d.]+)"',
             r'\1 width="\2" height="\3" viewBox="0 0 \2 \3"',
+            svg,
+            count=1,
+        )
+
+    # Na opschalen de weergavemaat terugzetten naar de originele afmetingen;
+    # de viewBox blijft in getracede coördinaten.
+    if scale > 1:
+        svg = re.sub(
+            r'(<svg[^>]*?)\swidth="[\d.]+"\sheight="[\d.]+"',
+            rf'\1 width="{display_size[0]}" height="{display_size[1]}"',
             svg,
             count=1,
         )

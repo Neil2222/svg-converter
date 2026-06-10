@@ -56,6 +56,8 @@ afbeelding blijven staan.
 
 - Max 20 MB upload
 - Afbeeldingen groter dan 2000 px worden eerst verkleind (sneller, kleinere SVG)
+- Afbeeldingen kleiner dan 1400 px worden vóór het traceren opgeschaald, zodat
+  fijne details (zoals kleine tekst) de speckle-filter overleven
 - Bewegende GIF/WebP: alleen het eerste frame wordt gevectoriseerd
 - Formaten die de browser zelf niet kan tonen (TGA, JPEG 2000, HEIC, ...)
   krijgen geen preview links, maar converteren gewoon
