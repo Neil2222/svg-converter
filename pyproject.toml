@@ -1,0 +1,19 @@
+[project]
+name = "svg-converter"
+version = "0.1.0"
+description = "Mini webserver die JPG/PNG vectoriseert naar SVG via VTracer"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "vtracer>=0.6",
+    "pillow>=11.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

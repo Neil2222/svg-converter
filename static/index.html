@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SVG Converter</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2338bdf8'/%3E%3Cpath d='M4 11.5 8 4.5l4 7z' fill='%230f172a'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --border: #334155;
+    --accent: #38bdf8;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+  h1 { font-size: 1.5rem; margin: 0.5rem 0 0.25rem; }
+  .sub { color: var(--muted); margin: 0 0 1.25rem; }
+
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 2.5rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #dropzone.dragover { border-color: var(--accent); background: #16243b; }
+  #dropzone p { margin: 0.25rem 0; }
+  #dropzone .hint { color: var(--muted); font-size: 0.9rem; }
+
+  .controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+  }
+  label { color: var(--muted); }
+  select, button {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  select:hover, button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0f172a; font-weight: 600; border: none; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #status { color: var(--muted); min-height: 1.4em; margin: 0.5rem 0; }
+  #status.error { color: #f87171; }
+
+  .result {
+    display: none;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .result.visible { display: grid; }
+  @media (max-width: 700px) { .result { grid-template-columns: 1fr; } }
+  .pane {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.75rem;
+  }
+  .pane h2 { font-size: 0.95rem; margin: 0 0 0.5rem; color: var(--muted); font-weight: 500; }
+  .pane .canvas {
+    background: repeating-conic-gradient(#475569 0% 25%, #64748b 0% 50%) 0 0 / 20px 20px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 280px;
+    overflow: hidden;
+  }
+  .pane img, .pane object { max-width: 100%; max-height: 480px; display: block; }
+</style>
+</head>
+<body>
+<main>
+  <h1>SVG Converter</h1>
+  <p class="sub">Zet een JPG of PNG om naar een echte vector-SVG.</p>
+
+  <div id="dropzone">
+    <p><strong>Sleep een afbeelding hierheen</strong> of klik om te kiezen</p>
+    <p class="hint">JPG of PNG, max 20 MB. Grote afbeeldingen worden verkleind tot 2000 px.</p>
+    <input type="file" id="fileinput" accept="image/png,image/jpeg" hidden>
+  </div>
+
+  <div class="controls">
+    <label for="preset">Type afbeelding:</label>
+    <select id="preset">
+      <option value="logo">Logo / icoon</option>
+      <option value="tekening" selected>Tekening / illustratie</option>
+      <option value="foto">Foto (experimenteel)</option>
+      <option value="zwartwit">Zwart-wit / lijntekening</option>
+    </select>
+    <button id="download" class="primary" disabled>Download SVG</button>
+    <button id="copy" disabled>Kopieer SVG</button>
+  </div>
+
+  <p id="status"></p>
+
+  <div class="result" id="result">
+    <div class="pane">
+      <h2 id="origLabel">Origineel</h2>
+      <div class="canvas"><img id="origImg" alt="Origineel"></div>
+    </div>
+    <div class="pane">
+      <h2 id="svgLabel">SVG</h2>
+      <div class="canvas"><img id="svgImg" alt="SVG-resultaat"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileinput = document.getElementById('fileinput');
+  const presetEl = document.getElementById('preset');
+  const downloadBtn = document.getElementById('download');
+  const copyBtn = document.getElementById('copy');
+  const statusEl = document.getElementById('status');
+  const resultEl = document.getElementById('result');
+
+  let currentFile = null;
+  let currentSvg = null;
+  let svgUrl = null;
+
+  function setStatus(msg, isError = false) {
+    statusEl.textContent = msg;
+    statusEl.className = isError ? 'error' : '';
+  }
+
+  function formatSize(bytes) {
+    return bytes < 1024 * 1024
+      ? (bytes / 1024).toFixed(1) + ' kB'
+      : (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  async function convert() {
+    if (!currentFile) return;
+    setStatus('Bezig met vectoriseren…');
+    downloadBtn.disabled = true;
+    copyBtn.disabled = true;
+
+    const fd = new FormData();
+    fd.append('file', currentFile);
+    fd.append('preset', presetEl.value);
+
+    let res;
+    try {
+      res = await fetch('/api/convert', { method: 'POST', body: fd });
+    } catch {
+      setStatus('Kon de server niet bereiken.', true);
+      return;
+    }
+    if (!res.ok) {
+      let detail = 'Er ging iets mis.';
+      try { detail = (await res.json()).detail || detail; } catch {}
+      setStatus(detail, true);
+      return;
+    }
+
+    currentSvg = await res.text();
+    if (svgUrl) URL.revokeObjectURL(svgUrl);
+    svgUrl = URL.createObjectURL(new Blob([currentSvg], { type: 'image/svg+xml' }));
+    document.getElementById('svgImg').src = svgUrl;
+    document.getElementById('svgLabel').textContent =
+      'SVG (' + formatSize(currentSvg.length) + ')';
+    resultEl.classList.add('visible');
+    downloadBtn.disabled = false;
+    copyBtn.disabled = false;
+    setStatus('Klaar.');
+  }
+
+  function loadFile(file) {
+    if (!file) return;
+    if (!/image\/(png|jpeg)/.test(file.type)) {
+      setStatus('Alleen JPG en PNG worden ondersteund.', true);
+      return;
+    }
+    currentFile = file;
+    document.getElementById('origImg').src = URL.createObjectURL(file);
+    document.getElementById('origLabel').textContent =
+      'Origineel (' + formatSize(file.size) + ')';
+    convert();
+  }
+
+  dropzone.addEventListener('click', () => fileinput.click());
+  fileinput.addEventListener('change', () => loadFile(fileinput.files[0]));
+  presetEl.addEventListener('change', convert);
+
+  dropzone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    loadFile(e.dataTransfer.files[0]);
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = svgUrl;
+    a.download = (currentFile.name.replace(/\.[^.]+$/, '') || 'afbeelding') + '.svg';
+    a.click();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(currentSvg);
+    setStatus('SVG gekopieerd naar klembord.');
+  });
+</script>
+</body>
+</html>
