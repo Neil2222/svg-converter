@@ -141,6 +141,51 @@
     margin: 1rem;
     text-align: center;
   }
+
+  #savedSection { margin-top: 2.5rem; }
+  #savedSection h2 { font-size: 1.1rem; margin: 0 0 0.25rem; }
+  #savedInfo { color: var(--muted); font-size: 0.85rem; margin: 0 0 1rem; }
+  #savedGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .card .thumb {
+    background: repeating-conic-gradient(#475569 0% 25%, #64748b 0% 50%) 0 0 / 20px 20px;
+    border-radius: 8px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .card .thumb img { max-width: 100%; max-height: 120px; }
+  .card .name {
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .card .meta { color: var(--muted); font-size: 0.8rem; }
+  .card .actions { display: flex; gap: 0.4rem; }
+  .card .actions button {
+    padding: 0.35rem 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card .actions button svg { display: block; }
+  .card .actions button.danger:hover { border-color: #f87171; color: #f87171; }
 </style>
 </head>
 <body>
@@ -172,6 +217,7 @@
     <span>&times; <span id="exportHeight">&ndash;</span> px</span>
     <button id="download" class="primary" disabled>Download SVG</button>
     <button id="copy" disabled>Kopieer SVG</button>
+    <button id="save" disabled>Bewaar in browser</button>
   </div>
 
   <p id="status"></p>
@@ -189,6 +235,12 @@
       <div class="canvas"><img id="svgImg" alt="SVG-resultaat"></div>
     </div>
   </div>
+
+  <section id="savedSection" hidden>
+    <h2>Bewaard in deze browser</h2>
+    <p id="savedInfo"></p>
+    <div id="savedGrid"></div>
+  </section>
 </main>
 
 <script>
@@ -201,6 +253,10 @@
   const resultEl = document.getElementById('result');
   const exportWidthEl = document.getElementById('exportWidth');
   const exportHeightEl = document.getElementById('exportHeight');
+  const saveBtn = document.getElementById('save');
+  const savedSection = document.getElementById('savedSection');
+  const savedInfo = document.getElementById('savedInfo');
+  const savedGrid = document.getElementById('savedGrid');
 
   let currentFile = null;
   let currentSvg = null;
@@ -225,6 +281,7 @@
     setStatus('Bezig met vectoriseren…');
     downloadBtn.disabled = true;
     copyBtn.disabled = true;
+    saveBtn.disabled = true;
 
     const fd = new FormData();
     fd.append('file', currentFile);
@@ -261,6 +318,7 @@
     resultEl.classList.add('visible');
     downloadBtn.disabled = false;
     copyBtn.disabled = false;
+    saveBtn.disabled = false;
     setStatus('Klaar.');
   }
 
@@ -342,6 +400,135 @@
     await navigator.clipboard.writeText(exportSvg());
     setStatus('SVG gekopieerd naar klembord.');
   });
+
+  // --- Bewaarde SVG's: IndexedDB, volledig client-side ---
+
+  let dbPromise = null;
+  function getDb() {
+    if (!dbPromise) {
+      dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open('svg-converter', 1);
+        req.onupgradeneeded = () =>
+          req.result.createObjectStore('svgs', { keyPath: 'id', autoIncrement: true });
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    return dbPromise;
+  }
+
+  async function dbRequest(mode, op) {
+    const db = await getDb();
+    return new Promise((resolve, reject) => {
+      const req = op(db.transaction('svgs', mode).objectStore('svgs'));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  const ICON_ATTRS = 'viewBox="0 0 24 24" width="16" height="16" fill="none" '
+    + 'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  const ICONS = {
+    download: `<svg ${ICON_ATTRS}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+    copy: `<svg ${ICON_ATTRS}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+    trash: `<svg ${ICON_ATTRS}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+  };
+
+  function iconButton(icon, label) {
+    const b = document.createElement('button');
+    b.innerHTML = ICONS[icon];
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    return b;
+  }
+
+  function downloadSvgText(svgText, name) {
+    const url = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name + '.svg';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  saveBtn.addEventListener('click', async () => {
+    try {
+      await dbRequest('readwrite', s => s.add({
+        name: currentFile.name.replace(/\.[^.]+$/, '') || 'afbeelding',
+        svg: exportSvg(),
+        bytes: currentSvg.length,
+        preset: currentPreset,
+        created: Date.now(),
+      }));
+      // Vraag de browser om deze opslag niet op te ruimen bij schijfruimtegebrek.
+      navigator.storage?.persist?.();
+      setStatus('SVG bewaard in deze browser.');
+      renderSaved();
+    } catch {
+      setStatus('Bewaren is mislukt (opslag vol of geblokkeerd?).', true);
+    }
+  });
+
+  async function renderSaved() {
+    let items;
+    try {
+      items = await dbRequest('readonly', s => s.getAll());
+    } catch {
+      return; // IndexedDB niet beschikbaar (bijv. geblokkeerd) — sectie blijft verborgen
+    }
+    savedGrid.querySelectorAll('img').forEach(img => URL.revokeObjectURL(img.src));
+    savedGrid.innerHTML = '';
+    savedSection.hidden = items.length === 0;
+    if (!items.length) return;
+
+    const total = items.reduce((sum, it) => sum + it.bytes, 0);
+    savedInfo.textContent = items.length + ' SVG' + (items.length === 1 ? '' : "'s")
+      + ' (' + formatSize(total) + ') — opgeslagen op dit apparaat, in deze browser';
+
+    for (const it of items.sort((a, b) => b.created - a.created)) {
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'thumb';
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(new Blob([it.svg], { type: 'image/svg+xml' }));
+      img.alt = it.name;
+      thumb.appendChild(img);
+
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = it.name;
+      name.title = it.name;
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = new Date(it.created).toLocaleDateString('nl-NL')
+        + ' · ' + formatSize(it.bytes);
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const dl = iconButton('download', 'Download');
+      dl.addEventListener('click', () => downloadSvgText(it.svg, it.name));
+      const cp = iconButton('copy', 'Kopieer SVG');
+      cp.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(it.svg);
+        setStatus("'" + it.name + "' gekopieerd naar klembord.");
+      });
+      const del = iconButton('trash', 'Verwijder');
+      del.classList.add('danger');
+      del.addEventListener('click', async () => {
+        await dbRequest('readwrite', s => s.delete(it.id));
+        renderSaved();
+      });
+      actions.append(dl, cp, del);
+
+      card.append(thumb, name, meta, actions);
+      savedGrid.appendChild(card);
+    }
+  }
+
+  renderSaved();
 </script>
 </body>
 </html>
