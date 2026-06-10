@@ -187,6 +187,27 @@
   .card .actions button svg { display: block; }
   .card .actions button.danger:hover { border-color: #f87171; color: #f87171; }
   .card .actions button.success { border-color: #4ade80; color: #4ade80; }
+
+  dialog {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    min-width: 320px;
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+  dialog h3 { margin: 0 0 0.25rem; font-size: 1rem; }
+  #dlName {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0 0 0.75rem;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dlActions { display: flex; gap: 0.5rem; margin-top: 1rem; justify-content: flex-end; }
 </style>
 </head>
 <body>
@@ -242,6 +263,20 @@
     <p id="savedInfo"></p>
     <div id="savedGrid"></div>
   </section>
+
+  <dialog id="dlDialog">
+    <h3>Download SVG</h3>
+    <p id="dlName"></p>
+    <div class="controls">
+      <label for="dlWidth">Breedte:</label>
+      <input type="number" id="dlWidth" min="16" max="20000" step="1">
+      <span>&times; <span id="dlHeight">&ndash;</span> px</span>
+    </div>
+    <div class="dlActions">
+      <button id="dlCancel">Annuleer</button>
+      <button id="dlConfirm" class="primary">Download</button>
+    </div>
+  </dialog>
 </main>
 
 <script>
@@ -303,9 +338,7 @@
     }
 
     currentSvg = await res.text();
-    const dims = currentSvg.match(/<svg[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"/);
-    natW = dims ? parseFloat(dims[1]) : null;
-    natH = dims ? parseFloat(dims[2]) : null;
+    [natW, natH] = svgSize(currentSvg);
     exportWidthEl.disabled = !natW;
     if (natW) {
       exportWidthEl.value = Math.round(natW);
@@ -366,15 +399,24 @@
     exportHeightEl.textContent = natW && w > 0 ? Math.round(w * natH / natW) : '–';
   });
 
-  // De gekozen exportbreedte alleen in de width/height-attributen zetten;
+  // De gekozen breedte alleen in de width/height-attributen zetten;
   // de viewBox blijft staan, dus de SVG zelf blijft vrij schaalbaar.
+  function resizeSvg(svgText, w, ratioW, ratioH) {
+    const h = Math.round(w * ratioH / ratioW);
+    return svgText.replace(/<svg([^>]*)>/, (full, attrs) =>
+      '<svg' + attrs.replace(/\s(?:width|height)="[^"]*"/g, '') +
+      ` width="${w}" height="${h}">`);
+  }
+
+  function svgSize(svgText) {
+    const m = svgText.match(/<svg[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"/);
+    return m ? [parseFloat(m[1]), parseFloat(m[2])] : [null, null];
+  }
+
   function exportSvg() {
     const w = parseInt(exportWidthEl.value, 10);
     if (!currentSvg || !natW || !(w > 0)) return currentSvg;
-    const h = Math.round(w * natH / natW);
-    return currentSvg.replace(/<svg([^>]*)>/, (full, attrs) =>
-      '<svg' + attrs.replace(/\s(?:width|height)="[^"]*"/g, '') +
-      ` width="${w}" height="${h}">`);
+    return resizeSvg(currentSvg, w, natW, natH);
   }
 
   dropzone.addEventListener('dragover', e => {
@@ -511,7 +553,7 @@
       const actions = document.createElement('div');
       actions.className = 'actions';
       const dl = iconButton('download', 'Download');
-      dl.addEventListener('click', () => downloadSvgText(it.svg, it.name));
+      dl.addEventListener('click', () => openDownloadDialog(it));
       const cp = iconButton('copy', 'Kopieer SVG');
       let cpTimer = null;
       cp.addEventListener('click', async () => {
@@ -536,6 +578,47 @@
       savedGrid.appendChild(card);
     }
   }
+
+  // --- Downloadmodal voor bewaarde SVG's ---
+
+  const dlDialog = document.getElementById('dlDialog');
+  const dlName = document.getElementById('dlName');
+  const dlWidth = document.getElementById('dlWidth');
+  const dlHeight = document.getElementById('dlHeight');
+  let dlItem = null;
+
+  function openDownloadDialog(it) {
+    const [w, h] = svgSize(it.svg);
+    dlItem = { ...it, w, h };
+    dlName.textContent = it.name + '.svg';
+    dlWidth.disabled = !w;
+    dlWidth.value = w ? Math.round(w) : '';
+    dlHeight.textContent = h ? Math.round(h) : '–';
+    dlDialog.showModal();
+  }
+
+  dlWidth.addEventListener('input', () => {
+    const w = parseInt(dlWidth.value, 10);
+    dlHeight.textContent = dlItem?.w && w > 0
+      ? Math.round(w * dlItem.h / dlItem.w) : '–';
+  });
+
+  dlWidth.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('dlConfirm').click();
+  });
+
+  document.getElementById('dlConfirm').addEventListener('click', () => {
+    let svg = dlItem.svg;
+    const w = parseInt(dlWidth.value, 10);
+    if (dlItem.w && w > 0) svg = resizeSvg(svg, w, dlItem.w, dlItem.h);
+    downloadSvgText(svg, dlItem.name);
+    dlDialog.close();
+  });
+
+  document.getElementById('dlCancel').addEventListener('click', () => dlDialog.close());
+  dlDialog.addEventListener('click', e => {
+    if (e.target === dlDialog) dlDialog.close();
+  });
 
   renderSaved();
 </script>
