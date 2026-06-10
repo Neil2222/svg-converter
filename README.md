@@ -47,8 +47,10 @@ Open de pagina, sleep een JPG/PNG naar de dropzone en kies het type afbeelding:
 Het resultaat verschijnt naast het origineel en is te downloaden of naar het
 klembord te kopiëren. Wisselen van preset converteert direct opnieuw.
 
-**Witte achtergrond verwijderen** maakt witte vlakken die de beeldrand raken
-transparant (flood fill); witte details binnenin de afbeelding blijven staan.
+**Achtergrond verwijderen** maakt de achtergrondkleur transparant via flood
+fill vanaf de hoeken en randmiddens (elke seed gebruikt zijn eigen kleur als
+referentie, dus wit én gekleurde achtergronden werken); details binnenin de
+afbeelding blijven staan.
 
 ## Limieten
 

@@ -48,22 +48,29 @@ PRESETS = {
 app = FastAPI(title="svg-converter")
 
 
-def remove_white_background(img: Image.Image, threshold: int = 240) -> Image.Image:
-    """Maak witte achtergrond transparant via flood fill vanaf de randen.
+def remove_background(img: Image.Image, tolerance: int = 24) -> Image.Image:
+    """Maak de achtergrond transparant via flood fill vanaf hoeken en randmiddens.
 
-    Alleen near-white gebieden die de rand raken worden verwijderd; witte
-    details binnenin de afbeelding blijven staan. VTracer slaat transparante
-    pixels vervolgens over bij het traceren.
+    Elke seed gebruikt zijn eigen pixelkleur als referentie, dus dit werkt voor
+    witte én gekleurde achtergronden (bijv. zwart ingebakken hoeken bij van een
+    website gekopieerde afbeeldingen). Details binnenin de afbeelding blijven
+    staan. VTracer slaat transparante pixels vervolgens over bij het traceren.
     """
     arr = np.array(img)  # RGBA
-    near_white = (arr[..., :3] >= threshold).all(axis=2) & (arr[..., 3] > 0)
-    labels, _ = ndimage.label(near_white)
-    border_labels = np.unique(
-        np.concatenate([labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1]])
-    )
-    border_labels = border_labels[border_labels != 0]
-    if border_labels.size:
-        arr[np.isin(labels, border_labels), 3] = 0
+    rgb = arr[..., :3].astype(np.int16)
+    alpha = arr[..., 3]
+    h, w = alpha.shape
+    # Alleen de hoeken als seed: randmiddens raken vaak het onderwerp zelf
+    # (bijv. een afgeronde rechthoek die de beeldrand raakt).
+    seeds = [(0, 0), (0, w - 1), (h - 1, 0), (h - 1, w - 1)]
+    removed = np.zeros((h, w), dtype=bool)
+    for y, x in seeds:
+        if alpha[y, x] == 0 or removed[y, x]:
+            continue
+        mask = (np.abs(rgb - rgb[y, x]) <= tolerance).all(axis=2) & (alpha > 0)
+        labels, _ = ndimage.label(mask)
+        removed |= labels == labels[y, x]
+    arr[removed, 3] = 0
     return Image.fromarray(arr)
 
 
@@ -100,7 +107,7 @@ async def convert(
         img.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
 
     if remove_bg:
-        img = remove_white_background(img)
+        img = remove_background(img)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
