@@ -186,6 +186,7 @@
   }
   .card .actions button svg { display: block; }
   .card .actions button.danger:hover { border-color: #f87171; color: #f87171; }
+  .card .actions button.success { border-color: #4ade80; color: #4ade80; }
 </style>
 </head>
 <body>
@@ -432,6 +433,7 @@
     download: `<svg ${ICON_ATTRS}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
     copy: `<svg ${ICON_ATTRS}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
     trash: `<svg ${ICON_ATTRS}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+    check: `<svg ${ICON_ATTRS}><polyline points="20 6 9 17 4 12"/></svg>`,
   };
 
   function iconButton(icon, label) {
@@ -511,9 +513,16 @@
       const dl = iconButton('download', 'Download');
       dl.addEventListener('click', () => downloadSvgText(it.svg, it.name));
       const cp = iconButton('copy', 'Kopieer SVG');
+      let cpTimer = null;
       cp.addEventListener('click', async () => {
         await navigator.clipboard.writeText(it.svg);
-        setStatus("'" + it.name + "' gekopieerd naar klembord.");
+        cp.innerHTML = ICONS.check;
+        cp.classList.add('success');
+        clearTimeout(cpTimer);
+        cpTimer = setTimeout(() => {
+          cp.innerHTML = ICONS.copy;
+          cp.classList.remove('success');
+        }, 1200);
       });
       const del = iconButton('trash', 'Verwijder');
       del.classList.add('danger');
