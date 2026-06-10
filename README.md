@@ -1,7 +1,11 @@
 # SVG Converter
 
-Mini webserver die een JPG of PNG omzet naar een echte vector-SVG, met
+Mini webserver die een afbeelding omzet naar een echte vector-SVG, met
 [VTracer](https://github.com/visioncortex/vtracer) als tracing-engine.
+
+Ondersteunde invoer: alles wat Pillow kan lezen — o.a. JPG, PNG, WebP, GIF
+(eerste frame), HEIC/HEIF (via pillow-heif), AVIF, BMP, TIFF, JPEG 2000,
+ICO, TGA, PCX en PPM.
 
 ## Starten
 
@@ -33,3 +37,6 @@ klembord te kopiëren. Wisselen van preset converteert direct opnieuw.
 
 - Max 20 MB upload
 - Afbeeldingen groter dan 2000 px worden eerst verkleind (sneller, kleinere SVG)
+- Bewegende GIF/WebP: alleen het eerste frame wordt gevectoriseerd
+- Formaten die de browser zelf niet kan tonen (TGA, JPEG 2000, HEIC, ...)
+  krijgen geen preview links, maar converteren gewoon

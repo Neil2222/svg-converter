@@ -6,6 +6,10 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
+from pillow_heif import register_heif_opener
+
+# HEIC/HEIF-ondersteuning (o.a. iPhone-foto's); overige formaten zitten al in Pillow.
+register_heif_opener()
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 # Vectorizing huge bitmaps is slow and yields bloated SVGs; cap the input size.
@@ -58,11 +62,13 @@ async def convert(file: UploadFile = File(...), preset: str = Form("tekening")):
 
     try:
         img = Image.open(io.BytesIO(data))
+        # Bij animaties (GIF/WebP) pakt Pillow standaard het eerste frame.
         img = img.convert("RGBA")
     except Exception:
         raise HTTPException(
             status_code=400,
-            detail="Kon de afbeelding niet lezen. Upload een geldige JPG of PNG.",
+            detail="Kon de afbeelding niet lezen. Upload een geldig afbeeldingsbestand "
+            "(bijv. JPG, PNG, WebP, GIF, HEIC, BMP of TIFF).",
         )
 
     if max(img.size) > MAX_DIMENSION:

@@ -132,17 +132,28 @@
     overflow: hidden;
   }
   .pane img, .pane object { max-width: 100%; max-height: 480px; display: block; }
+  #origNote {
+    color: var(--text);
+    background: var(--panel);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    padding: 0.75rem 1rem;
+    margin: 1rem;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
 <main>
   <h1>SVG Converter</h1>
-  <p class="sub">Zet een JPG of PNG om naar een echte vector-SVG.</p>
+  <p class="sub">Zet vrijwel elke afbeelding om naar een echte vector-SVG.</p>
 
   <div id="dropzone">
     <p><strong>Sleep een afbeelding hierheen</strong> of klik om te kiezen</p>
-    <p class="hint">JPG of PNG, max 20 MB. Grote afbeeldingen worden verkleind tot 2000 px.</p>
-    <input type="file" id="fileinput" accept="image/png,image/jpeg" hidden>
+    <p class="hint">JPG, PNG, WebP, GIF, HEIC, BMP, TIFF, JPEG&nbsp;2000 en meer, max 20 MB.
+      Grote afbeeldingen worden verkleind tot 2000 px.</p>
+    <input type="file" id="fileinput"
+      accept="image/*,.jp2,.j2k,.jpf,.heic,.heif,.avif,.tga,.pcx,.dds,.ppm,.pgm,.pbm" hidden>
   </div>
 
   <div class="controls">
@@ -168,7 +179,10 @@
   <div class="result" id="result">
     <div class="pane">
       <h2 id="origLabel">Origineel</h2>
-      <div class="canvas"><img id="origImg" alt="Origineel"></div>
+      <div class="canvas">
+        <img id="origImg" alt="Origineel">
+        <span id="origNote" hidden>Geen voorbeeld voor dit formaat &mdash; de conversie werkt wel</span>
+      </div>
     </div>
     <div class="pane">
       <h2 id="svgLabel">SVG</h2>
@@ -250,14 +264,27 @@
     setStatus('Klaar.');
   }
 
+  const origImg = document.getElementById('origImg');
+  const origNote = document.getElementById('origNote');
+
+  // De browser kan niet elk formaat tonen (TGA, JPEG 2000, HEIC, ...);
+  // de server converteert dan gewoon, alleen de preview links ontbreekt.
+  origImg.addEventListener('error', () => {
+    origImg.hidden = true;
+    origNote.hidden = false;
+  });
+
   function loadFile(file) {
     if (!file) return;
-    if (!/image\/(png|jpeg)/.test(file.type)) {
-      setStatus('Alleen JPG en PNG worden ondersteund.', true);
+    const knownExt = /\.(png|jpe?g|jfif|jp2|j2k|jpf|gif|webp|bmp|ico|tiff?|tga|pcx|dds|pp?m|pgm|pbm|heic|heif|avif)$/i;
+    if (!file.type.startsWith('image/') && !knownExt.test(file.name)) {
+      setStatus('Dit lijkt geen afbeeldingsbestand te zijn.', true);
       return;
     }
     currentFile = file;
-    document.getElementById('origImg').src = URL.createObjectURL(file);
+    origImg.hidden = false;
+    origNote.hidden = true;
+    origImg.src = URL.createObjectURL(file);
     document.getElementById('origLabel').textContent =
       'Origineel (' + formatSize(file.size) + ')';
     convert();
