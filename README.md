@@ -13,6 +13,10 @@ start.bat
 De server draait dan op poort **5285** (bind op 0.0.0.0, zodat de Synology
 reverse proxy erbij kan: `svg.neiltwo2.nl` → `http://<pc-ip>:5285`).
 
+Lokaal openen via **`http://127.0.0.1:5285`** — niet `localhost`: Chrome
+probeert dan IPv6 (`::1`) en de server luistert alleen op IPv4, dus dat geeft
+`ERR_CONNECTION_REFUSED`.
+
 ## Gebruik
 
 Open de pagina, sleep een JPG/PNG naar de dropzone en kies het type afbeelding:
