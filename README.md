@@ -9,7 +9,12 @@ TGA, PCX en PPM.
 
 ## Snel Starten
 
-Voor degene die de zip ontvangt:
+De makkelijkste manier op Windows is de knop **Download voor Windows**
+rechtsboven (indien beschikbaar): een zelfstandige `.exe` die je dubbelklikt,
+zonder Python te installeren. De eerste start duurt even omdat de exe zichzelf
+uitpakt; daarna opent de browser vanzelf.
+
+Wie in plaats daarvan de broncode-zip gebruikt, heeft Python 3.11+ nodig:
 
 1. Pak `svg-converter.zip` uit.
 2. Dubbelklik op `start.bat`.
@@ -103,3 +108,19 @@ Niet meesturen:
 - `.git/`
 - `CLAUDE.md`
 - `maak-zip.bat`
+
+## Windows-exe Maken
+
+Voor een zelfstandige `.exe` die de ontvanger zonder Python kan draaien:
+
+```bat
+build-exe.bat
+```
+
+Dat bundelt Python en alle dependencies met
+[PyInstaller](https://pyinstaller.org/) tot `dist\svg-converter.exe` (one-file,
+ca. 80 MB). De webserver in `server.py` serveert deze exe via de knop
+**Download voor Windows** in de README, zodra de build bestaat.
+
+De bestandenlijst voor de zip staat zowel in `maak-zip.bat` als in `DIST_FILES`
+in `server.py`; werk beide bij als de distributie-inhoud verandert.

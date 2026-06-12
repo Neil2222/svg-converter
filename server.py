@@ -1,12 +1,14 @@
 import io
 import re
+import sys
+import zipfile
 from pathlib import Path
 
 import numpy as np
 import vtracer
 from scipy import ndimage
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import PlainTextResponse, Response
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pillow_heif import register_heif_opener
@@ -47,7 +49,20 @@ PRESETS = {
 }
 
 app = FastAPI(title="svg-converter")
-README_PATH = Path(__file__).with_name("README.md")
+# Bij een PyInstaller-exe staan de gebundelde bestanden in een tijdelijke map
+# (sys._MEIPASS); anders gewoon naast dit bestand.
+BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+README_PATH = BASE_DIR / "README.md"
+
+# Bestanden die in de distributiezip horen — dezelfde set als maak-zip.bat.
+DIST_FILES = ["server.py", "pyproject.toml", "start.bat", "README.md"]
+
+# De standalone Windows-build. Als de exe zelf draait is dat het eigen
+# executable; vanuit de broncode/service staat hij in dist/ na build-exe.bat.
+if getattr(sys, "frozen", False):
+    EXE_PATH = Path(sys.executable)
+else:
+    EXE_PATH = Path(__file__).parent / "dist" / "svg-converter.exe"
 
 
 def use_current_color(svg: str) -> str:
@@ -90,6 +105,36 @@ def health():
 @app.get("/README.md", response_class=PlainTextResponse)
 def readme():
     return README_PATH.read_text(encoding="utf-8")
+
+
+@app.get("/download/svg-converter.zip")
+def download_zip():
+    """Bouw de distributiezip in het geheugen, zodat de download altijd de
+    actuele bestanden bevat (zelfde set als maak-zip.bat)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name in DIST_FILES:
+            zf.write(BASE_DIR / name, name)
+        for path in sorted((BASE_DIR / "static").rglob("*")):
+            if path.is_file():
+                zf.write(path, path.relative_to(BASE_DIR).as_posix())
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="svg-converter.zip"'},
+    )
+
+
+@app.head("/download/svg-converter.exe")
+@app.get("/download/svg-converter.exe")
+def download_exe():
+    """De zelfstandige Windows-exe (geen Python nodig). 404 als die er niet is,
+    zodat de frontend de knop alleen toont wanneer de build beschikbaar is."""
+    if not EXE_PATH.is_file():
+        raise HTTPException(status_code=404, detail="De Windows-build is niet beschikbaar.")
+    return FileResponse(
+        EXE_PATH, media_type="application/octet-stream", filename="svg-converter.exe"
+    )
 
 
 @app.post("/api/convert")
@@ -155,6 +200,19 @@ async def convert(
     if remove_bg:
         img = remove_background(img)
 
+    # VTracer's binary-mode negeert het alphakanaal en zijn helderheidsdrempel
+    # is onbetrouwbaar voor gekleurde logo's: rood wordt bijvoorbeeld als
+    # "licht" gezien en verdwijnt volledig. Maak de zwart-wit-bitmap daarom
+    # zelf, kleur-onafhankelijk: plak op wit (transparant -> wit) en markeer
+    # elke pixel die merkbaar van wit afwijkt als zwart. Zo wordt elke gekleurde
+    # of donkere vorm getraceerd en blijft alleen (bijna-)wit achtergrond.
+    if PRESETS[preset]["colormode"] == "binary":
+        white = Image.new("RGBA", img.size, (255, 255, 255, 255))
+        flat = np.array(Image.alpha_composite(white, img))[..., :3].astype(np.int16)
+        foreground = (255 - flat).max(axis=2) > 40
+        bw = np.where(foreground[..., None], 0, 255).astype(np.uint8)
+        img = Image.fromarray(np.repeat(bw, 3, axis=2), "RGB")
+
     buf = io.BytesIO()
     img.save(buf, format="PNG")
 
@@ -191,4 +249,28 @@ async def convert(
     return Response(content=svg, media_type="image/svg+xml")
 
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory=str(BASE_DIR / "static"), html=True), name="static")
+
+
+def main():
+    """Entrypoint voor de standalone .exe: start de server en open de browser.
+
+    Wordt alleen uitgevoerd als dit bestand direct draait (de exe), niet wanneer
+    de Windows-service het via `uvicorn server:app` importeert.
+    """
+    import os
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    port = int(os.environ.get("PORT", "5285"))
+    url = f"http://127.0.0.1:{port}"
+    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    print(f"SVG Converter draait op {url}")
+    print("Sluit dit venster om de server te stoppen.")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+
+
+if __name__ == "__main__":
+    main()
