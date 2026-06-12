@@ -1,11 +1,12 @@
 import io
 import re
+from pathlib import Path
 
 import numpy as np
 import vtracer
 from scipy import ndimage
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pillow_heif import register_heif_opener
@@ -46,6 +47,13 @@ PRESETS = {
 }
 
 app = FastAPI(title="svg-converter")
+README_PATH = Path(__file__).with_name("README.md")
+
+
+def use_current_color(svg: str) -> str:
+    """Maak zwart-wit iconen meekleurend met de CSS/textkleur."""
+    svg = re.sub(r'\sfill="(?:#000(?:000)?|black|rgb\(0,\s*0,\s*0\))"', "", svg, flags=re.I)
+    return re.sub(r"<svg\b(?![^>]*\sfill=)", '<svg fill="currentColor"', svg, count=1)
 
 
 def remove_background(img: Image.Image, tolerance: int = 24) -> Image.Image:
@@ -77,6 +85,11 @@ def remove_background(img: Image.Image, tolerance: int = 24) -> Image.Image:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/README.md", response_class=PlainTextResponse)
+def readme():
+    return README_PATH.read_text(encoding="utf-8")
 
 
 @app.post("/api/convert")
@@ -171,6 +184,9 @@ async def convert(
             svg,
             count=1,
         )
+
+    if preset == "zwartwit":
+        svg = use_current_color(svg)
 
     return Response(content=svg, media_type="image/svg+xml")
 

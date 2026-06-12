@@ -5,6 +5,8 @@ logs/
 dist/
 build/
 .venv/
+venv/
+svg-converter.zip
 
 # IDE
 .vscode/

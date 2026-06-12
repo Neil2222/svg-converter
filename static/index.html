@@ -23,7 +23,14 @@
     min-height: 100vh;
   }
   main { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
-  h1 { font-size: 1.5rem; margin: 0.5rem 0 0.25rem; }
+  .topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0.5rem 0 1.25rem;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
   .sub { color: var(--muted); margin: 0 0 1.25rem; }
 
   #dropzone {
@@ -205,6 +212,73 @@
   }
   dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
   dialog h3 { margin: 0 0 0.25rem; font-size: 1rem; }
+  #readmeDialog {
+    width: min(860px, calc(100vw - 2rem));
+    max-height: min(760px, calc(100vh - 2rem));
+    padding: 0;
+  }
+  .modalHeader {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 1.25rem;
+  }
+  .modalHeader h2 { margin: 0; font-size: 1.05rem; }
+  .modalBody {
+    max-height: calc(min(760px, 100vh - 2rem) - 65px);
+    overflow: auto;
+    padding: 1.25rem;
+  }
+  .markdown {
+    color: var(--text);
+    line-height: 1.58;
+  }
+  .markdown h1,
+  .markdown h2,
+  .markdown h3 {
+    line-height: 1.2;
+    margin: 1.4rem 0 0.6rem;
+  }
+  .markdown h1:first-child,
+  .markdown h2:first-child { margin-top: 0; }
+  .markdown h1 { font-size: 1.55rem; }
+  .markdown h2 {
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+    font-size: 1.15rem;
+  }
+  .markdown h3 { font-size: 1rem; }
+  .markdown p { margin: 0.65rem 0; }
+  .markdown ul,
+  .markdown ol { margin: 0.65rem 0 0.9rem; padding-left: 1.4rem; }
+  .markdown li { margin: 0.3rem 0; }
+  .markdown a { color: var(--accent); }
+  .markdown code {
+    background: #0b1220;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.1rem 0.28rem;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 0.9em;
+  }
+  .markdown pre {
+    background: #0b1220;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: auto;
+    padding: 0.85rem 1rem;
+  }
+  .markdown pre code {
+    background: none;
+    border: none;
+    padding: 0;
+  }
   #dlName {
     color: var(--muted);
     font-size: 0.85rem;
@@ -219,8 +293,13 @@
 </head>
 <body>
 <main>
-  <h1>SVG Converter</h1>
-  <p class="sub">Zet vrijwel elke afbeelding om naar een echte vector-SVG.</p>
+  <div class="topbar">
+    <div>
+      <h1>SVG Converter</h1>
+      <p class="sub">Zet vrijwel elke afbeelding om naar een echte vector-SVG.</p>
+    </div>
+    <button id="readmeBtn">README</button>
+  </div>
 
   <div id="dropzone">
     <p><strong>Sleep een afbeelding hierheen</strong>, klik om te kiezen, of plak met Ctrl+V</p>
@@ -287,6 +366,16 @@
       <button id="dlConfirm" class="primary">Download</button>
     </div>
   </dialog>
+
+  <dialog id="readmeDialog">
+    <div class="modalHeader">
+      <h2>README</h2>
+      <button id="readmeClose">Sluiten</button>
+    </div>
+    <div class="modalBody">
+      <div id="readmeContent" class="markdown">README wordt geladen...</div>
+    </div>
+  </dialog>
 </main>
 
 <script>
@@ -303,6 +392,8 @@
   const savedSection = document.getElementById('savedSection');
   const savedInfo = document.getElementById('savedInfo');
   const savedGrid = document.getElementById('savedGrid');
+  const readmeDialog = document.getElementById('readmeDialog');
+  const readmeContent = document.getElementById('readmeContent');
 
   let currentFile = null;
   let currentSvg = null;
@@ -320,6 +411,121 @@
     return bytes < 1024 * 1024
       ? (bytes / 1024).toFixed(1) + ' kB'
       : (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, ch => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[ch]));
+  }
+
+  function inlineMarkdown(text) {
+    return escapeHtml(text)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  }
+
+  function renderMarkdown(md) {
+    const lines = md.replace(/\r\n/g, '\n').split('\n');
+    const html = [];
+    let list = null;
+    let paragraph = [];
+    let code = null;
+
+    const closeParagraph = () => {
+      if (!paragraph.length) return;
+      html.push('<p>' + inlineMarkdown(paragraph.join(' ')) + '</p>');
+      paragraph = [];
+    };
+    const closeList = () => {
+      if (!list) return;
+      html.push('</' + list + '>');
+      list = null;
+    };
+
+    for (const line of lines) {
+      const fence = line.match(/^```/);
+      if (fence && code !== null) {
+        html.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
+        code = null;
+        continue;
+      }
+      if (fence) {
+        closeParagraph();
+        closeList();
+        code = [];
+        continue;
+      }
+      if (code !== null) {
+        code.push(line);
+        continue;
+      }
+
+      if (!line.trim()) {
+        closeParagraph();
+        closeList();
+        continue;
+      }
+
+      const heading = line.match(/^(#{1,3})\s+(.+)$/);
+      if (heading) {
+        closeParagraph();
+        closeList();
+        const level = heading[1].length;
+        html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+        continue;
+      }
+
+      const bullet = line.match(/^-\s+(.+)$/);
+      if (bullet) {
+        closeParagraph();
+        if (list !== 'ul') {
+          closeList();
+          html.push('<ul>');
+          list = 'ul';
+        }
+        html.push('<li>' + inlineMarkdown(bullet[1]) + '</li>');
+        continue;
+      }
+
+      const numbered = line.match(/^\d+\.\s+(.+)$/);
+      if (numbered) {
+        closeParagraph();
+        if (list !== 'ol') {
+          closeList();
+          html.push('<ol>');
+          list = 'ol';
+        }
+        html.push('<li>' + inlineMarkdown(numbered[1]) + '</li>');
+        continue;
+      }
+
+      closeList();
+      paragraph.push(line.trim());
+    }
+
+    if (code !== null) html.push('<pre><code>' + escapeHtml(code.join('\n')) + '</code></pre>');
+    closeParagraph();
+    closeList();
+    return html.join('\n');
+  }
+
+  async function openReadme() {
+    readmeDialog.showModal();
+    if (readmeContent.dataset.loaded) return;
+    try {
+      const res = await fetch('/README.md');
+      if (!res.ok) throw new Error();
+      readmeContent.innerHTML = renderMarkdown(await res.text());
+      readmeContent.dataset.loaded = 'true';
+    } catch {
+      readmeContent.textContent = 'README kon niet worden geladen.';
+    }
   }
 
   async function convert() {
@@ -640,6 +846,12 @@
   document.getElementById('dlCancel').addEventListener('click', () => dlDialog.close());
   dlDialog.addEventListener('click', e => {
     if (e.target === dlDialog) dlDialog.close();
+  });
+
+  document.getElementById('readmeBtn').addEventListener('click', openReadme);
+  document.getElementById('readmeClose').addEventListener('click', () => readmeDialog.close());
+  readmeDialog.addEventListener('click', e => {
+    if (e.target === readmeDialog) readmeDialog.close();
   });
 
   renderSaved();
